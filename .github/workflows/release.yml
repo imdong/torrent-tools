@@ -6,7 +6,7 @@ on:
     tags:
       - 'v*'  # 当推送以 "v" 开头的标签时触发构建
     branches:
-      - 'test' # 测试
+      - 'main' # 主线
 
 jobs:
   build:
@@ -14,14 +14,14 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]  # 构建的平台
+        os: [linux, darwin, windows]  # 构建的平台
         arch: [amd64, arm64]  # 架构
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up Go (如果是 Golang 项目)
+      - name: Set up Go
         uses: actions/setup-go@v3
         with:
           go-version: '1.22.3'  # 根据你的项目需求选择 Go 版本
@@ -33,20 +33,19 @@ jobs:
 
       - name: Build for ${{ matrix.os }} ${{ matrix.arch }}
         run: |
-          GOOS=linux GOARCH=amd64
-          GOOS=${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'darwin' || 'windows' }} \
+          GOOS=${{ matrix.os }} \
           GOARCH=${{ matrix.arch }} \
           go build -o "torrent_match-${{ matrix.os }}-${{ matrix.arch }}" cmd/torrent-match/main.go
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: myapp-${{ matrix.os }}-${{ matrix.arch }}
-          path: myapp-${{ matrix.os }}-${{ matrix.arch }}
 
       - name: Create zip file for ${{ matrix.os }} ${{ matrix.arch }}
         run: |
           zip -r "torrent_match-${{ matrix.os }}-${{ matrix.arch }}.zip" "torrent_match-${{ matrix.os }}-${{ matrix.arch }}"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: torrent_match
+          path: torrent_match-${{ matrix.os }}-${{ matrix.arch }}.zip
 
   release:
     needs: build
@@ -55,21 +54,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Create release
+      - name: Download build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: torrent_match  # 下载构建的 zip 文件
+
+      - name: Create release or pre-release
         id: create_release
         run: |
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          echo "Creating release for tag $TAG_NAME"
-          release_url=$(curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -d '{"tag_name": "'$TAG_NAME'", "name": "'$TAG_NAME'", "body": "Release for '$TAG_NAME'"}' \
-            https://api.github.com/repos/${{ github.repository }}/releases)
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            # 如果是标签推送，创建正式版本
+            TAG_NAME=${GITHUB_REF#refs/tags/}
+            echo "Creating release for tag $TAG_NAME"
+            PRE_RELEASE=false
+          elif [[ $GITHUB_REF == refs/heads/test ]]; then
+            # 如果是 test 分支推送，创建预发布版本
+            COMMIT_ID=$(git rev-parse --short HEAD)
+            echo "Creating pre-release for commit $COMMIT_ID"
+            TAG_NAME="pre-release-${COMMIT_ID}"
+            PRE_RELEASE=true
+          fi
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_ENV
+          echo "PRE_RELEASE=$PRE_RELEASE" >> $GITHUB_ENV
 
-      - name: Upload release assets
-        run: |
-          for artifact in $(ls myapp-*)
-          do
-            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              -H "Content-Type: application/octet-stream" \
-              --data-binary @"$artifact" \
-              "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.create_release.outputs.id }}/assets?name=$artifact"
-          done
+      - name: Upload release assets (zip files)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "torrent_match-*.zip"  # 上传所有构建的 zip 文件
+          tag_name: ${{env.TAG_NAME}}
+          prerelease: ${{env.PRE_RELEASE}}
