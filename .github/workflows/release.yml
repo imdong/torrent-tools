@@ -5,6 +5,8 @@ on:
   push:
     tags:
       - 'v*'  # 当推送以 "v" 开头的标签时触发构建
+    branches:
+      - 'test' # 测试
 
 jobs:
   build:
@@ -13,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]  # 构建的平台
-        arch: [x64, arm64]  # 架构
+        arch: [amd64, arm64]  # 架构
 
     steps:
       - name: Checkout repository
@@ -31,6 +33,7 @@ jobs:
 
       - name: Build for ${{ matrix.os }} ${{ matrix.arch }}
         run: |
+          GOOS=linux GOARCH=amd64
           GOOS=${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'darwin' || 'windows' }} \
           GOARCH=${{ matrix.arch }} \
           go build -o "torrent_match-${{ matrix.os }}-${{ matrix.arch }}" cmd/torrent-match/main.go
