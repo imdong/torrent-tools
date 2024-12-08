@@ -68,7 +68,7 @@ jobs:
             echo "Creating release for tag $TAG_NAME"
             PRE_RELEASE=false
           elif [[ $GITHUB_REF == refs/heads/main ]]; then
-            # 如果是 test 分支推送，创建预发布版本
+            # 如果是分支推送，创建预发布版本
             COMMIT_ID=$(git rev-parse --short HEAD)
             echo "Creating pre-release for commit $COMMIT_ID"
             TAG_NAME="pre-release-${COMMIT_ID}"
