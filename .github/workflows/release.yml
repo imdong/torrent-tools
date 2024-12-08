@@ -1,0 +1,72 @@
+name: Build and Release
+
+# 触发规则
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送以 "v" 开头的标签时触发构建
+
+jobs:
+  build:
+    runs-on: ubuntu-latest  # 在 Ubuntu 上运行
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]  # 构建的平台
+        arch: [x64, arm64]  # 架构
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Go (如果是 Golang 项目)
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.22.3'  # 根据你的项目需求选择 Go 版本
+
+      - name: Install dependencies
+        run: |
+          # 安装项目的依赖项，具体根据你的项目需求调整
+          go mod tidy
+
+      - name: Build for ${{ matrix.os }} ${{ matrix.arch }}
+        run: |
+          GOOS=${{ matrix.os == 'ubuntu-latest' && 'linux' || matrix.os == 'macos-latest' && 'darwin' || 'windows' }} \
+          GOARCH=${{ matrix.arch }} \
+          go build -o "torrent_match-${{ matrix.os }}-${{ matrix.arch }}" cmd/torrent-match/main.go
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: myapp-${{ matrix.os }}-${{ matrix.arch }}
+          path: myapp-${{ matrix.os }}-${{ matrix.arch }}
+
+      - name: Create zip file for ${{ matrix.os }} ${{ matrix.arch }}
+        run: |
+          zip -r "torrent_match-${{ matrix.os }}-${{ matrix.arch }}.zip" "torrent_match-${{ matrix.os }}-${{ matrix.arch }}"
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Create release
+        id: create_release
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          echo "Creating release for tag $TAG_NAME"
+          release_url=$(curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -d '{"tag_name": "'$TAG_NAME'", "name": "'$TAG_NAME'", "body": "Release for '$TAG_NAME'"}' \
+            https://api.github.com/repos/${{ github.repository }}/releases)
+
+      - name: Upload release assets
+        run: |
+          for artifact in $(ls myapp-*)
+          do
+            curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary @"$artifact" \
+              "https://uploads.github.com/repos/${{ github.repository }}/releases/${{ steps.create_release.outputs.id }}/assets?name=$artifact"
+          done
