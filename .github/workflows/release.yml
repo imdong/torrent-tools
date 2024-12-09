@@ -35,7 +35,7 @@ jobs:
         run: |
           GOOS=${{ matrix.os }} \
           GOARCH=${{ matrix.arch }} \
-          go build -o "torrent_match-${{ matrix.os }}-${{ matrix.arch }}" cmd/torrent-match/main.go
+          go build -ldflags="-s -w" -o "torrent_match-${{ matrix.os }}-${{ matrix.arch }}" cmd/torrent-match/main.go
 
       - name: Create zip file for ${{ matrix.os }} ${{ matrix.arch }}
         run: |
