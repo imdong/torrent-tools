@@ -6,7 +6,7 @@ on:
     tags:
       - 'v*'  # 当推送以 "v" 开头的标签时触发构建
     branches:
-      - 'main' # 主线
+      - 'release' # 发布线
 
 jobs:
   build:
@@ -16,6 +16,7 @@ jobs:
       matrix:
         os: [linux, darwin, windows]  # 构建的平台
         arch: [amd64, arm64]  # 架构
+        cmd: [torrent-tools] # 编译的命令
 
     steps:
       - name: Checkout repository
@@ -24,28 +25,29 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
-          go-version: '1.22.3'  # 根据你的项目需求选择 Go 版本
+          go-version: '1.22.3'
 
       - name: Install dependencies
-        run: |
-          # 安装项目的依赖项，具体根据你的项目需求调整
-          go mod tidy
+        run: go mod tidy
 
       - name: Build for ${{ matrix.os }} ${{ matrix.arch }}
+        env:
+          GOOS: "${{ matrix.os }}"
+          GOARCH: "${{ matrix.arch }}"
         run: |
-          GOOS=${{ matrix.os }} \
-          GOARCH=${{ matrix.arch }} \
-          go build -ldflags="-s -w" -o "torrent_match-${{ matrix.os }}-${{ matrix.arch }}" cmd/torrent-match/main.go
+          mkdir ./dist \
+          go build -ldflags="-s -w" -o "./dist/${{matrix.cmd}}-${{ matrix.os }}-${{ matrix.arch }}" cmd/${{matrix.cmd}}/main.go
 
       - name: Create zip file for ${{ matrix.os }} ${{ matrix.arch }}
         run: |
-          zip -r "torrent_match-${{ matrix.os }}-${{ matrix.arch }}.zip" "torrent_match-${{ matrix.os }}-${{ matrix.arch }}"
+          cd ./dist \
+          zip -r "${{matrix.cmd}}-${{ matrix.os }}-${{ matrix.arch }}.zip" "${{matrix.cmd}}-${{ matrix.os }}-${{ matrix.arch }}"
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: torrent_match
-          path: torrent_match-${{ matrix.os }}-${{ matrix.arch }}.zip
+          name: torrent_tools
+          path: ./dist/${{matrix.cmd}}-${{ matrix.os }}-${{ matrix.arch }}.zip
 
   release:
     needs: build
@@ -57,7 +59,7 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v3
         with:
-          name: torrent_match  # 下载构建的 zip 文件
+          name: torrent_tools  # 下载构建的 zip 文件
 
       - name: Create release or pre-release
         id: create_release
@@ -81,6 +83,6 @@ jobs:
       - name: Upload release assets (zip files)
         uses: softprops/action-gh-release@v2
         with:
-          files: "torrent_match-*.zip"  # 上传所有构建的 zip 文件
+          files: "./dist/*.zip"  # 上传所有构建的 zip 文件
           tag_name: ${{env.TAG_NAME}}
           prerelease: ${{env.PRE_RELEASE}}
