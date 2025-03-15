@@ -1,22 +1,13 @@
-name: Build and Release
+name: 定时采集
 
-# 触发规则
 on:
-  push:
-    tags:
-      - 'v*'  # 当推送以 "v" 开头的标签时触发构建
-    branches:
-      - 'release' # 发布线
+  schedule:
+    - cron: '25 6,18 * * *'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest  # 在 Ubuntu 上运行
-
-    strategy:
-      matrix:
-        os: [linux, darwin, windows]  # 构建的平台
-        arch: [amd64, arm64]  # 架构
-        cmd: [torrent-tools] # 编译的命令
 
     steps:
       - name: Checkout repository
